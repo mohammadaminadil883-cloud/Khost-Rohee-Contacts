@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="ps" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f5c7a">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<title>د زده کوونکو شمېرې</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<style>
+:root{--bg:#f3f6f8;--card:#fff;--ink:#14232e;--mute:#5d6f7c;--line:#d5dde3;--brand:#0f5c7a;--bi:#fff;--call:#168a4a;--danger:#b3261e}
+@media (prefers-color-scheme:dark){:root{--bg:#0e171d;--card:#17232b;--ink:#e8eff3;--mute:#9fb0bb;--line:#2b3b45;--brand:#4cb3d6;--bi:#06222d;--call:#3fc27a;--danger:#ff8a80}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Noto Naskh Arabic","Noto Sans Arabic","Segoe UI",Tahoma,Arial,sans-serif;font-size:17px;line-height:1.7;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+.wrap{max-width:720px;margin:0 auto;padding:16px}
+h1{font-size:1.4rem;margin:6px 0}
+input{width:100%;font:inherit;color:var(--ink);background:var(--card);border:1.5px solid var(--line);border-radius:10px;padding:10px 12px}
+input:focus,button:focus-visible{outline:3px solid var(--brand);outline-offset:1px}
+input[type=email],input[type=password]{direction:ltr;text-align:right}
+button{font:inherit;cursor:pointer;border:0;border-radius:10px;padding:9px 16px;font-weight:600}
+.primary{background:var(--brand);color:var(--bi)}
+.ghost{background:transparent;color:var(--mute);border:1.5px solid var(--line)}
+.card{background:var(--card);border:1.5px solid var(--line);border-radius:12px;padding:14px;margin-bottom:10px}
+.top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.search{position:sticky;top:env(safe-area-inset-top,0px);background:var(--bg);padding:8px 0;z-index:2}
+.search input{border-color:var(--brand);font-size:1.1rem;padding:13px 14px}
+.name{font-weight:700;font-size:1.1rem}
+.meta{color:var(--mute);font-size:.92rem}
+.calls{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.dial{display:inline-flex;gap:8px;background:var(--call);color:#fff;text-decoration:none;border-radius:10px;padding:9px 16px;font-weight:700}
+.dial span{direction:ltr}
+.id{direction:ltr;display:inline-block;background:var(--line);border-radius:6px;padding:0 8px;font-size:.88rem}
+.msg{padding:8px 12px;border-radius:10px;margin:8px 0;background:var(--card);border:1.5px solid var(--line)}
+.err{color:var(--danger);border-color:var(--danger)}
+.hide{display:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div id="loginView" class="hide">
+  <h1>د مدیر ننوتل</h1>
+  <div class="card">
+    <p class="meta">یو ځل ننوتل پکار دي، تر څو ډیټا ښکته شي. وروسته پرته له انټرنټ کار کوي.</p>
+    <form id="lf">
+      <label class="meta">بریښنالیک</label><input id="em" type="email" required autocomplete="username">
+      <label class="meta" style="margin-top:8px;display:block">پټنوم</label><input id="pw" type="password" required autocomplete="current-password">
+      <div style="margin-top:10px;display:flex;gap:8px"><button class="primary" type="submit">ننوځه</button><button class="ghost" type="button" id="lcancel">شاته</button></div>
+    </form>
+  </div>
+  <div id="lmsg"></div>
+</div>
+
+<div id="appView" class="hide">
+  <div class="top"><h1>د زده کوونکو شمېرې</h1><button class="primary" id="sync">🔄 تازه کړه</button></div>
+  <div class="meta" id="status"></div>
+  <div class="search"><input id="q" type="search" placeholder="د ID، نوم، پلار، ټولګي یا شمېرې په اساس ولټوه…" autocomplete="off"></div>
+  <div id="msg"></div>
+  <div class="meta" id="count"></div>
+  <div id="list"></div>
+  <p style="text-align:center;margin-top:20px"><button class="ghost" id="reset">ټوله ډیټا بیا له سره ښکته کړه</button> <button class="ghost" id="out">وتل</button></p>
+</div>
+
+</div>
+<script>
+(function(){
+  var URL_="https://wxnssbkdgnrvydvzwqzs.supabase.co";
+  var KEY="sb_publishable_EzNuc2IHffzprMUsoEN4Pg_Fe-9GBf_";
+  var $=function(i){return document.getElementById(i)};
+  var sb=window.supabase?window.supabase.createClient(URL_,KEY):null;
+  var data=[],busy=false;
+
+  function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
+  function norm(s){return String(s||"").replace(/[۰-۹]/g,function(d){return "۰۱۲۳۴۵۶۷۸۹".indexOf(d)}).replace(/[٠-٩]/g,function(d){return "٠١٢٣٤٥٦٧٨٩".indexOf(d)}).toLowerCase()}
+  function tel(s){return norm(s).replace(/[^\d+]/g,"")}
+  function say(t,bad){$("msg").innerHTML=t?'<div class="msg'+(bad?' err':'')+'">'+esc(t)+'</div>':""}
+  function view(v){$("loginView").classList.toggle("hide",v!=="login");$("appView").classList.toggle("hide",v!=="app")}
+
+  /* ---- IndexedDB ---- */
+  var dbp=new Promise(function(res,rej){
+    var r=indexedDB.open("school-contacts",1);
+    r.onupgradeneeded=function(){r.result.createObjectStore("students",{keyPath:"id"})};
+    r.onsuccess=function(){res(r.result)};r.onerror=function(){rej(r.error)};
+  });
+  function tx(mode,fn){return dbp.then(function(db){return new Promise(function(res,rej){
+    var t=db.transaction("students",mode),s=t.objectStore("students");fn(s);
+    t.oncomplete=function(){res()};t.onerror=function(){rej(t.error)};t.onabort=function(){rej(t.error)}})})}
+  function readAll(){return dbp.then(function(db){return new Promise(function(res,rej){
+    var q=db.transaction("students","readonly").objectStore("students").getAll();
+    q.onsuccess=function(){res(q.result)};q.onerror=function(){rej(q.error)}})})}
+  function getLS(k){try{return localStorage.getItem(k)}catch(e){return null}}
+  function setLS(k,v){try{localStorage.setItem(k,v)}catch(e){}}
+  function delLS(k){try{localStorage.removeItem(k)}catch(e){}}
+
+  /* ---- render ---- */
+  function render(){
+    var q=norm($("q").value.trim()),qd=q.replace(/\s/g,"");
+    var rows=data.filter(function(s){
+      if(!q)return true;
+      return norm([s.student_id,s.name,s.father_name,s.class_name].join(" ")).indexOf(q)>-1||(qd&&(tel(s.phone1).indexOf(qd)>-1||tel(s.phone2).indexOf(qd)>-1));
+    });
+    $("count").textContent="ټول: "+data.length+" — ښودل شوي: "+rows.length;
+    if(!rows.length){$("list").innerHTML='<div class="msg">'+(data.length?"هېڅ پایله ونه موندل شوه.":"لا تر اوسه ډیټا نشته. «تازه کړه» کېکاږه.")+'</div>';return}
+    $("list").innerHTML=rows.slice(0,100).map(function(s){
+      var m=[s.father_name?"د "+esc(s.father_name)+" زوی/لور":"",s.class_name?"ټولګی: "+esc(s.class_name):""].filter(Boolean).join(" • ");
+      return '<div class="card"><div class="name">'+esc(s.name)+' <span class="id">'+esc(s.student_id)+'</span></div>'+(m?'<div class="meta">'+m+'</div>':'')+
+      '<div class="calls"><a class="dial" href="tel:'+esc(tel(s.phone1))+'">📞 زنګ ووهه <span>'+esc(s.phone1)+'</span></a>'+
+      (s.phone2?'<a class="dial" href="tel:'+esc(tel(s.phone2))+'">📞 <span>'+esc(s.phone2)+'</span></a>':'')+'</div></div>';
+    }).join("")+(rows.length>100?'<div class="msg">لومړي ۱۰۰ پایلې ښودل شوې. لټون ډېر دقیق کړه.</div>':"");
+  }
+  function status(){
+    var t=getLS("lastSyncShown");
+    $("status").textContent=t?"وروستی تازه کېدل: "+new Date(t).toLocaleString():"لا تر اوسه تازه شوی نه دی";
+  }
+  function sortData(){data.sort(function(a,b){return String(a.name).localeCompare(String(b.name),"ps")})}
+
+  /* ---- sync ---- */
+  async function sync(manual){
+    if(busy)return;
+    if(!sb){if(manual)say("د انټرنټ اړیکه نشته. اپلکېشن د خوندي ډیټا سره کار کوي.",true);return}
+    if(!navigator.onLine){if(manual)say("انټرنټ نشته. اپلکېشن د خوندي ډیټا سره کار کوي.",true);return}
+    var ses=await sb.auth.getSession();
+    if(!ses.data||!ses.data.session){if(manual||!data.length)view("login");return}
+    view("app");busy=true;if(manual)say("تازه کېږي…");
+    try{
+      var last=getLS("lastSync"),changed=0,from=last;
+      while(true){
+        var q=sb.from("students").select("*").order("updated_at",{ascending:true}).limit(1000);
+        if(from)q=q.gt("updated_at",from);
+        var r=await q;
+        if(r.error)throw r.error;
+        var rows=r.data;if(!rows.length)break;
+        await tx("readwrite",function(s){rows.forEach(function(x){if(x.deleted)s.delete(x.id);else s.put(x)})});
+        changed+=rows.length;from=rows[rows.length-1].updated_at;setLS("lastSync",from);
+        if(rows.length<1000)break;
+      }
+      setLS("lastSyncShown",new Date().toISOString());
+      data=await readAll();sortData();render();status();
+      say(changed?changed+" بدلونونه ښکته شول ✓":"هر څه تازه دي ✓");
+    }catch(e){say("تازه کېدل ونه شول: "+(e.message||e),true)}
+    busy=false;
+  }
+
+  /* ---- events ---- */
+  $("q").addEventListener("input",render);
+  $("sync").addEventListener("click",function(){sync(true)});
+  $("lcancel").addEventListener("click",function(){view("app")});
+  $("lf").addEventListener("submit",async function(e){
+    e.preventDefault();$("lmsg").innerHTML="";
+    if(!sb||!navigator.onLine){$("lmsg").innerHTML='<div class="msg err">د ننوتلو لپاره انټرنټ پکار دی.</div>';return}
+    var r=await sb.auth.signInWithPassword({email:$("em").value.trim(),password:$("pw").value});
+    if(r.error){$("lmsg").innerHTML='<div class="msg err">بریښنالیک یا پټنوم ناسم دی.</div>';return}
+    $("pw").value="";view("app");sync(true);
+  });
+  $("out").addEventListener("click",async function(){
+    if(!confirm("وتل؟ خوندي ډیټا په موبایل کې پاتې کېږي."))return;
+    if(sb)try{await sb.auth.signOut()}catch(e){}
+    view("login");
+  });
+  $("reset").addEventListener("click",async function(){
+    if(!confirm("ټوله خوندي ډیټا ړنګه شي او له سره ښکته شي؟ (انټرنټ پکار دی)"))return;
+    if(!navigator.onLine){say("انټرنټ نشته.",true);return}
+    await tx("readwrite",function(s){s.clear()});delLS("lastSync");data=[];render();sync(true);
+  });
+  window.addEventListener("online",function(){sync(false)});
+
+  /* ---- start ---- */
+  if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js").catch(function(){});
+  readAll().then(function(rows){
+    data=rows;sortData();render();status();
+    if(!data.length)view("login");else view("app");
+    sync(false);
+  }).catch(function(){view("login")});
+})();
+</script>
+</body>
+</html>
